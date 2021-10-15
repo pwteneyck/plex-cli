@@ -1,0 +1,87 @@
+#! /usr/bin/python3
+
+import argparse
+import requests
+import subprocess
+import sys
+
+from fuzzywuzzy import fuzz
+from html.parser import HTMLParser
+
+# CONFIGURATION VALUES
+# These will change based on the setup of the server/network
+PLEX_ADDR = '192.168.x.x'
+PLEX_PORT = '32400'
+PLEX_AUTH_TOKEN = 'test token pls ignore'
+PLEX_LIBRARY_ID = None
+
+AUTH_TOKEN_HEADER = 'X-Plex-Token'
+PLEX_URL = f'http://{PLEX_ADDR}:{PLEX_PORT}'
+LIST_MOVIES_URL = PLEX_URL + f'/library/sections/{PLEX_LIBRARY_ID}/all'
+FUZZY_SEARCH_THRESHOLD_DEFAULT = 60
+
+
+class PlexMediaListHTMLParser(HTMLParser):
+	def __init__(self, movie_list_to_fill):
+		self.movie_list = movie_list_to_fill
+		self.current_title = ''
+		super().__init__()
+
+	def handle_starttag(self, tag, attrs):
+		if tag == 'video':
+			self.current_title = next(filter(lambda attr: attr[0] == 'title', attrs), None)[1]
+		elif tag == 'part':
+			lib_key = next(filter(lambda attr: attr[0] == 'key', attrs), None)[1]
+			self.movie_list.append((self.current_title, lib_key))
+
+	def handle_endtag(self, tag):
+		if tag == 'Video':
+			self.current_title = ''
+
+
+def search(term, threshold, list_all=False):
+	r = requests.get(LIST_MOVIES_URL, params={AUTH_TOKEN_HEADER: PLEX_AUTH_TOKEN})
+	movie_list = list()
+	parser = PlexMediaListHTMLParser(movie_list)
+	parser.feed(r.text)
+
+	if list_all:
+		return movie_list
+	else:
+		return list(filter(lambda movie: fuzz.token_set_ratio(term, movie[0]) > threshold, movie_list))
+
+def pick(movie_list):
+	for i, movie in enumerate(movie_list):
+		print("[{}]: {}".format(i, movie[0]))
+
+	choice = int(input('Selection: '))
+	if (choice >= len(movie_list)):
+		sys.exit(0)
+	return movie_list[int(choice)]
+
+def play(lib_key):
+	play_url = PLEX_URL + lib_key + '?' + \
+		AUTH_TOKEN_HEADER + '=' + PLEX_AUTH_TOKEN
+	subprocess.run(['mpv', play_url])
+
+parser = argparse.ArgumentParser()
+parser.add_argument('search', nargs='*')
+parser.add_argument('--all', action='store_true')
+parser.add_argument('-t', '--threshold', default=FUZZY_SEARCH_THRESHOLD_DEFAULT, required=False, type=int)
+args = parser.parse_args()
+
+if args.threshold > 99 or args.threshold < 0:
+	print('Threshold must be in range [0,99]')
+	sys.exit(0)
+
+search_term = ' '.join(args.search)
+matched_movies = search(search_term, args.threshold, args.all)
+if len(matched_movies) == 0:
+	print('No movies found that matched search critiera')
+	sys.exit(0)
+elif len(matched_movies) == 1:
+	print(f'Found one match; autoplaying "{matched_movies[0][0]}"')
+	play(matched_movies[0][1])
+else:
+	selected_match = pick(matched_movies)
+	play(selected_match[1])
