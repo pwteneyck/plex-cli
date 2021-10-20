@@ -22,8 +22,8 @@ FUZZY_SEARCH_THRESHOLD_DEFAULT = 60
 
 
 class PlexMediaListHTMLParser(HTMLParser):
-	def __init__(self, movie_list_to_fill):
-		self.movie_list = movie_list_to_fill
+	def __init__(self, movie_dict_to_fill):
+		self.movie_dict = movie_dict_to_fill
 		self.current_title = ''
 		super().__init__()
 
@@ -32,7 +32,7 @@ class PlexMediaListHTMLParser(HTMLParser):
 			self.current_title = next(filter(lambda attr: attr[0] == 'title', attrs), None)[1]
 		elif tag == 'part':
 			lib_key = next(filter(lambda attr: attr[0] == 'key', attrs), None)[1]
-			self.movie_list.append((self.current_title, lib_key))
+			self.movie_dict[self.current_title] = lib_key
 
 	def handle_endtag(self, tag):
 		if tag == 'Video':
@@ -41,14 +41,15 @@ class PlexMediaListHTMLParser(HTMLParser):
 
 def search(term, threshold, list_all=False):
 	r = requests.get(LIST_MOVIES_URL, params={AUTH_TOKEN_HEADER: PLEX_AUTH_TOKEN})
-	movie_list = list()
-	parser = PlexMediaListHTMLParser(movie_list)
+	movie_dict = {}
+	parser = PlexMediaListHTMLParser(movie_dict)
 	parser.feed(r.text)
 
 	if list_all:
-		return movie_list
+		return list(movie_dict.items())
 	else:
-		return list(filter(lambda movie: fuzz.token_set_ratio(term, movie[0]) > threshold, movie_list))
+		search_results = {key: value for key, value in movie_dict.items() if fuzz.token_set_ratio(term, key) > threshold }
+		return list(search_results.items())
 
 def pick(movie_list):
 	for i, movie in enumerate(movie_list):
