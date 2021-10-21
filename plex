@@ -1,24 +1,63 @@
 #! /usr/bin/python3
 
 import argparse
+import configparser
 import requests
 import subprocess
 import sys
 
 from fuzzywuzzy import fuzz
 from html.parser import HTMLParser
+from pathlib import Path
 
 # CONFIGURATION VALUES
 # These will change based on the setup of the server/network
-PLEX_ADDR = '192.168.x.x'
-PLEX_PORT = '32400'
-PLEX_AUTH_TOKEN = 'test token pls ignore'
+# Populated from ~/.plex_conf
+PLEX_ADDR = None
+PLEX_PORT = None
+PLEX_AUTH_TOKEN = None
 PLEX_LIBRARY_ID = None
 
+PLEX_URL = None
+LIST_MOVIES_URL = None
+
 AUTH_TOKEN_HEADER = 'X-Plex-Token'
-PLEX_URL = f'http://{PLEX_ADDR}:{PLEX_PORT}'
-LIST_MOVIES_URL = PLEX_URL + f'/library/sections/{PLEX_LIBRARY_ID}/all'
 FUZZY_SEARCH_THRESHOLD_DEFAULT = 60
+
+def load_config(server_name):
+	global PLEX_ADDR
+	global PLEX_PORT
+	global PLEX_AUTH_TOKEN
+	global PLEX_LIBRARY_ID
+	global PLEX_URL
+	global LIST_MOVIES_URL
+
+	config = configparser.ConfigParser()
+	config.read(str(Path.home()) + '/.plex_conf')
+	server_config = None
+
+	if server_name is None:
+		if len(config.sections()) == 1:
+			server_config = config[config.sections()[0]]
+		else:
+			if 'do-not-use' in config.sections():
+				server_config = config['do-not-use']
+				print('No server specified despite multiple options. Using default values found in ~/.plex_conf')
+			else:
+				print(f'Found multiple available servers ({config.sections()}). Either specify one with "--server" or specify a default in ~/.plex_conf')
+				sys.exit(1)
+	else:
+		server_config = config[server_name]
+
+	default_config = config['terra']
+
+	PLEX_ADDR = server_config['Addr']
+	PLEX_PORT = server_config['Port']
+	PLEX_AUTH_TOKEN = server_config['AuthToken']
+	PLEX_LIBRARY_ID = server_config['LibraryID']
+
+	PLEX_URL = f'http://{PLEX_ADDR}:{PLEX_PORT}'
+	LIST_MOVIES_URL = PLEX_URL + f'/library/sections/{PLEX_LIBRARY_ID}/all'
 
 
 class PlexMediaListHTMLParser(HTMLParser):
@@ -67,9 +106,12 @@ def play(lib_key):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('search', nargs='*')
+parser.add_argument('--server', type=str, required=False)
 parser.add_argument('--all', action='store_true')
 parser.add_argument('-t', '--threshold', default=FUZZY_SEARCH_THRESHOLD_DEFAULT, required=False, type=int)
 args = parser.parse_args()
+
+load_config(args.server)
 
 if args.threshold > 99 or args.threshold < 0:
 	print('Threshold must be in range [0,99]')

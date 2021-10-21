@@ -14,4 +14,6 @@ SIMPLE CLI for streaming movies from a local plex server without opening a web b
   * `PLEX_AUTH_TOKEN`: the value of the `X-Plex-Token` header - log in to the server in a web browser and snoop your traffic to grab this. AFAIK these tokens take a while to expire...
   * `PLEX_LIBRARY_ID`: the integer ID of the library the script should search. Currently this script only works for movies. Again, log in to the server in a web browser and snoop your traffic while you navigate to the library - you're looking for a request to `http://{plex-url}/library/sections/{PLEX_LIBRARY_ID}/...`.
 1. Make sure your dependencies are installed - currently tested and working for `mpv-0.27.2`
+1. `cp plex.conf ~/.plex_conf`
+1. Fill in the appropriate values in `~/.plex_conf`
 1. Try it out: `plex --all` or `plex star wars`
