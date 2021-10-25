@@ -49,8 +49,6 @@ def load_config(server_name):
 	else:
 		server_config = config[server_name]
 
-	default_config = config['terra']
-
 	PLEX_ADDR = server_config['Addr']
 	PLEX_PORT = server_config['Port']
 	PLEX_AUTH_TOKEN = server_config['AuthToken']
