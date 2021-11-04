@@ -2,9 +2,11 @@
 
 import argparse
 import configparser
+import os
 import requests
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 from fuzzywuzzy import fuzz
 from html.parser import HTMLParser
@@ -23,6 +25,78 @@ LIST_MOVIES_URL = None
 
 AUTH_TOKEN_HEADER = 'X-Plex-Token'
 FUZZY_SEARCH_THRESHOLD_DEFAULT = 60
+DEFAULT_PLEX_PORT = 32400 # https://support.plex.tv/articles/200931138-troubleshooting-remote-access/
+CONFIG_PATH = str(Path.home()) + '/.plex_conf'
+
+def parse_nmap_xml_output(filename):
+	tree = ET.parse(filename)
+	root = tree.getroot()
+	found_host = root.find(".//service[@name='plex']/../../..")
+	if found_host is not None:
+		address = found_host.find('address').get('addr')
+		port = found_host.find(".//ports/port/service[@name='plex']/..").get('portid')
+		return (address, port)
+	else:
+		return None
+
+def network_ip_range():
+	ip_out = subprocess.Popen('ip a show dev wlp2s0'.split(' '), stdout=subprocess.PIPE)
+	ip_range_out = subprocess.run(['grep', '-Po', '([0-9]+.){4}/[0-9]+'],stdin=ip_out.stdout, stdout=subprocess.PIPE)
+	return ip_range_out.stdout.decode('utf-8').strip()
+
+def discover_network_info(ip=None, port=None):
+	output_file = '.nmap_plex_out.xml'
+	cmd = f'nmap --open -oX {output_file}'
+	print(f'IP: {ip}')
+	print(f'Port: {port}')
+	if ip is None:
+		ip = network_ip_range()
+		print(f'No IP address/range specified; using full network IP range ({ip})...')
+
+	if port is None:
+		print(f'No port specified; checking default (32400) first...')
+		subprocess.run(f'{cmd} {ip} -p 32400'.split(' '), stdout=subprocess.PIPE)
+		net_info = parse_nmap_xml_output(output_file)
+		if (net_info is not None):
+			os.remove(output_file)
+			return net_info
+		else:
+			print(f'No Plex server found using default port 32400; checking potential IP range (20000-50000)')
+			print(f'This might take a few minutes...')
+			sys.exit(1)
+			port = '20000-50000'
+	subprocess.run(f'{cmd} {ip} -p {port}'.split(' '), stdout=subprocess.PIPE)
+	net_info = parse_nmap_xml_output(output_file)
+	if (net_info is not None):
+		os.remove(output_file)
+		return net_info
+	else:
+		print(f'No Plex server found on local network. Contact the owner/admin for connection info')
+		print(f'If you ARE the owner/admin, make sure your server is up and the `plex` process is running,')
+		print(f'then specify the correct IP address/port for init.')
+		os.remove(output_file)
+		sys.exit(1)
+
+def init_config(servername=None, ip=None, port=None, auth_token=None, library_id=None):
+	net_info = discover_network_info(ip, port)
+	print(f'Found Plex listening at {net_info[0]}:{net_info[1]}')
+	choice = input('Press "Enter" to write to config')
+	config = configparser.ConfigParser()
+	config[servername] = {}
+	config[servername]['Addr'] = net_info[0]
+	config[servername]['Port'] = net_info[1]
+	config[servername]['AuthToken'] = auth_token
+	config[servername]['LibraryID'] = str(library_id)
+
+	file_open_mode = 'w'
+	if os.path.exists(CONFIG_PATH):
+		print(f'Found existing config file - appending {servername} to existing configuration')
+		file_open_mode = 'a'
+
+	with open(str(Path.home()) + '/.plex_conf', file_open_mode) as configfile:
+		configfile.write('\n')
+		config.write(configfile)
+		configfile.write('\n')
 
 def load_config(server_name):
 	global PLEX_ADDR
@@ -33,7 +107,7 @@ def load_config(server_name):
 	global LIST_MOVIES_URL
 
 	config = configparser.ConfigParser()
-	config.read(str(Path.home()) + '/.plex_conf')
+	config.read(CONFIG_PATH)
 	server_config = None
 
 	if server_name is None:
@@ -92,7 +166,7 @@ def pick(movie_list):
 	for i, movie in enumerate(movie_list):
 		print("[{}]: {}".format(i, movie[0]))
 
-	choice = int(input('Selection: '))
+	choice = int(input('Selection: ' or 0))
 	if (choice >= len(movie_list)):
 		sys.exit(0)
 	return movie_list[int(choice)]
@@ -102,12 +176,67 @@ def play(lib_key):
 		AUTH_TOKEN_HEADER + '=' + PLEX_AUTH_TOKEN
 	subprocess.run(['mpv', play_url])
 
+
+def init(args):
+	if args.name is None:
+		args.name = input('Server name: ')
+	if args.addr is None:
+		args.addr = input('IP address (leave empty to automatically discover): ') or None
+	if args.port is None:
+		args.port = input('Service port (leave empty to automatically discover): ') or None
+	if args.token is None:
+		args.token = input('Plex auth token: ') or 'None'
+	if args.libraryId is None:
+		args.libraryId = int(input('Library ID: ') or '1')
+	init_config(args.name, args.addr, args.port, args.token, args.libraryId) 
+
+def watch(args):
+	load_config(args.server)
+	if args.threshold > 99 or args.threshold < 0:
+		print('Threshold must be in range [0,99]')
+		sys.exit(0)
+	search_term = ' '.join(args.search)
+	matched_movies = search(search_term, args.threshold, args.all)
+	if len(matched_movies) == 0:
+		print('No movies found that matched search critiera')
+		sys.exit(0)
+	elif len(matched_movies) == 1:
+		print(f'Found one match; autoplaying "{matched_movies[0][0]}"')
+		play(matched_movies[0][1])
+	else:
+		selected_match = pick(matched_movies)
+		play(selected_match[1])
+	return 0
+
 parser = argparse.ArgumentParser()
-parser.add_argument('search', nargs='*')
-parser.add_argument('--server', type=str, required=False)
-parser.add_argument('--all', action='store_true')
-parser.add_argument('-t', '--threshold', default=FUZZY_SEARCH_THRESHOLD_DEFAULT, required=False, type=int)
+subparsers = parser.add_subparsers()
+init_parser = subparsers.add_parser('init')
+init_parser.add_argument('-n', '--name', required=False, type=str)
+init_parser.add_argument('-ip', '--addr', required=False, type=str)
+init_parser.add_argument('-p', '--port', required=False, type=str)
+init_parser.add_argument('-t', '--token', required=False, type=str)
+init_parser.add_argument('-li', '--libraryId', required=False, type=str)
+init_parser.set_defaults(func=init)
+
+watch_parser = subparsers.add_parser('watch')
+watch_parser.add_argument('search', nargs='*')
+watch_parser.add_argument('--server', type=str, required=False)
+watch_parser.add_argument('--all', action='store_true')
+watch_parser.add_argument('-t', '--threshold', default=FUZZY_SEARCH_THRESHOLD_DEFAULT, required=False, type=int)
+watch_parser.set_defaults(func=watch)
+
 args = parser.parse_args()
+
+# https://stackoverflow.com/a/54161510
+try:
+	func = args.func
+except AttributeError:
+	parser.print_help()
+func(args)
+
+if args.init:
+	init_config('terra')
+	sys.exit(0)
 
 load_config(args.server)
 

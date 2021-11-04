@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<?xml-stylesheet href="file:///usr/bin/../share/nmap/nmap.xsl" type="text/xsl"?>
+<!-- Nmap 7.60 scan initiated Thu Nov  4 10:39:47 2021 as: nmap -&#45;open -oX nmap_out.xml -p 20000-50000 192.168.4.0/24 -->
+<nmaprun scanner="nmap" args="nmap -&#45;open -oX nmap_out.xml -p 20000-50000 192.168.4.0/24" start="1636040387" startstr="Thu Nov  4 10:39:47 2021" version="7.60" xmloutputversion="1.04">
+	<scaninfo type="connect" protocol="tcp" numservices="30001" services="20000-50000"/>
+	<verbose level="0"/>
+	<debugging level="0"/>
+	<host starttime="1636040387" endtime="1636040467">
+		<status state="up" reason="conn-refused" reason_ttl="0"/>
+		<address addr="192.168.4.104" addrtype="ipv4"/>
+		<hostnames>
+		</hostnames>
+		<ports>
+			<extraports state="closed" count="29988">
+				<extrareasons reason="conn-refused" count="29988"/>
+			</extraports>
+			<extraports state="filtered" count="12">
+				<extrareasons reason="no-responses" count="12"/>
+			</extraports>
+			<port protocol="tcp" portid="30103"><state state="open" reason="syn-ack" reason_ttl="0"/></port>
+		</ports>
+		<times srtt="12849" rttvar="792" to="100000"/>
+	</host>
+	<host starttime="1636040387" endtime="1636040466">
+		<status state="up" reason="conn-refused" reason_ttl="0"/>
+		<address addr="192.168.4.131" addrtype="ipv4"/>
+		<hostnames>
+		</hostnames>
+		<ports>
+			<extraports state="closed" count="29947">
+				<extrareasons reason="conn-refused" count="29947"/>
+			</extraports>
+			<extraports state="filtered" count="53">
+				<extrareasons reason="no-responses" count="53"/>
+			</extraports>
+			<port protocol="tcp" portid="46541"><state state="open" reason="syn-ack" reason_ttl="0"/></port>
+		</ports>
+	<times srtt="32696" rttvar="8683" to="100000"/>
+	</host>
+	<host starttime="1636040387" endtime="1636040467">
+		<status state="up" reason="conn-refused" reason_ttl="0"/>
+		<address addr="192.168.4.207" addrtype="ipv4"/>
+		<hostnames>
+		</hostnames>
+		<ports>
+			<extraports state="closed" count="30000">
+				<extrareasons reason="conn-refused" count="30000"/>
+			</extraports>
+			<port protocol="tcp" portid="32400">
+				<state state="open" reason="syn-ack" reason_ttl="0"/>
+				<service name="plex" method="table" conf="3"/>
+			</port>
+		</ports>
+	<times srtt="7167" rttvar="1565" to="100000"/>
+	</host>
+	<runstats>
+		<finished time="1636040620" timestr="Thu Nov  4 10:43:40 2021" elapsed="233.53" summary="Nmap done at Thu Nov  4 10:43:40 2021; 256 IP addresses (11 hosts up) scanned in 233.53 seconds" exit="success"/>
+		<hosts up="11" down="245" total="256"/>
+	</runstats>
+</nmaprun>
